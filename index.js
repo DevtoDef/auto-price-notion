@@ -58,3 +58,4 @@ async function main() {
 
 // Chạy ngay và lặp lại mỗi 5 phút
 main();
+setInterval(main, 5 * 60 * 1000);
