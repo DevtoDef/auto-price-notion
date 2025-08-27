@@ -7,8 +7,6 @@ dotenv.config(); // Đảm bảo đã cài package dotenv để sử dụng bi�
 
 const notionToken = process.env.NOTION_TOKEN;   // API key lấy ở bước 1
 const databaseId = process.env.NOTION_DATABASE_ID;  // API database ID
-console.log(notionToken);
-console.log(databaseId);
 
 const notion = new Client({
   auth: notionToken
