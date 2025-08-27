@@ -19,7 +19,7 @@ async function getPrice(symbol) {
     const data = await res.json();
     return parseFloat(data.price);
   } catch (e) {
-    console.log(e)
+    console.log(e);
     console.error(`❌ Không lấy được giá cho ${symbol}: ${e.message}`);
     return null;
   }
