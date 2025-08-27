@@ -1,105 +1,127 @@
 import { Client } from "@notionhq/client";
 import dotenv from "dotenv";
-import fetch from "node-fetch";
+import { HttpsProxyAgent } from "https-proxy-agent";
 
+// Tải các biến môi trường từ file .env
 dotenv.config();
 
+// --- CẤU HÌNH ---
 const notionToken = process.env.NOTION_TOKEN;
 const databaseId = process.env.NOTION_DATABASE_ID;
+const proxyUrl = process.env.PROXY_URL; // Lấy URL của proxy từ biến môi trường
 
+// Kiểm tra các biến môi trường cần thiết
+if (!notionToken || !databaseId) {
+  throw new Error("Vui lòng cung cấp NOTION_TOKEN và NOTION_DATABASE_ID trong file .env hoặc GitHub Secrets.");
+}
+
+// --- KHỞI TẠO ---
 const notion = new Client({ auth: notionToken });
-const notion = new Client({
-  auth: notionToken
-});
 
-// Hàm tiện ích để tạo độ trễ
+// Chỉ khởi tạo proxy agent nếu PROXY_URL được cung cấp
+// Ghi chú: Khi chạy local mà không cần proxy, chỉ cần không đặt biến PROXY_URL
+const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : null;
+if (proxyUrl) {
+    console.log("💡 Đang sử dụng proxy để gửi yêu cầu.");
+} else {
+    console.log("💡 Không sử dụng proxy.");
+}
+
+
+// --- CÁC HÀM CHỨC NĂNG ---
+
+/**
+ * Hàm tiện ích để tạo độ trễ giữa các yêu cầu.
+ * @param {number} ms - Thời gian chờ tính bằng mili giây.
+ */
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-async function getAllPrices() {
+/**
+ * Lấy giá của một mã ticker từ API Binance.
+ * @param {string} symbol - Tên biểu tượng (ví dụ: BTCUSDT).
+ * @returns {Promise<number|null>} - Trả về giá hoặc null nếu có lỗi.
+ */
+async function getPrice(symbol) {
   try {
-    const res = await fetch("https://api.binance.com/api/v3/ticker/price", {
+    const fetchOptions = {
+      method: 'GET',
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Accept": "application/json,text/plain,*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Cache-Control": "no-cache",
-      },
-    });
-    if (!res.ok) throw new Error(`Binance API error: ${res.statusText}`);
-    // ✅ [CẢI TIẾN 1] Thêm User-Agent để giả lập trình duyệt
-    const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`, {
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
-        }
-    });
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+      }
+    };
+
+    // Thêm proxy agent vào yêu cầu nếu nó đã được cấu hình
+    if (agent) {
+      fetchOptions.agent = agent;
+    }
+
+    const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`, fetchOptions);
 
     if (!res.ok) {
-        if (res.status === 429) {
-            console.error(`❌ Bị giới hạn tốc độ (Rate Limited) khi lấy giá cho ${symbol}. Thử tăng độ trễ.`);
-        }
-        throw new Error(`Binance API error: ${res.statusText}`);
+      const errorBody = await res.text();
+      console.error(`❌ Lỗi từ API Binance cho ${symbol}. Status: ${res.status}`);
+      console.error(`❌ Nội dung lỗi: ${errorBody}`);
+      return null;
     }
-    const data = await res.json();
 
-    // Map lại thành object { BTCUSDT: 67200, ETHUSDT: 3200, ... }
-    const priceMap = {};
-    for (let item of data) {
-      priceMap[item.symbol] = parseFloat(item.price);
-    }
-    return priceMap;
+    const data = await res.json();
+    return parseFloat(data.price);
   } catch (e) {
-    console.error(`❌ Không lấy được dữ liệu từ Binance: ${e.message}`);
-    return {};
+    console.error(`❌ Đã xảy ra lỗi kết nối khi fetch giá cho ${symbol}:`, e.message);
+    return null;
   }
 }
 
+/**
+ * Hàm chính để quét database Notion và cập nhật giá.
+ */
 async function main() {
   const response = await notion.databases.query({ database_id: databaseId });
   const pages = response.results;
   console.log(`🔎 Tìm thấy ${pages.length} trang để cập nhật.`);
 
-  const priceMap = await getAllPrices();
-
   for (const page of pages) {
-    const ticker = page.properties["Ticker"]?.rich_text?.[0]?.plain_text?.toUpperCase();
+    const tickerProperty = page.properties["Ticker"];
+    const ticker = tickerProperty?.rich_text?.[0]?.plain_text?.toUpperCase();
+
     if (!ticker) {
       console.log(`⚠️ Page ${page.id} chưa có Ticker, bỏ qua.`);
       continue;
     }
 
     const symbol = `${ticker}USDT`;
-    const price = priceMap[symbol];
+    const price = await getPrice(symbol);
 
     if (price !== null) {
       await notion.pages.update({
         page_id: page.id,
-        properties: {
-          "Current Price": { number: price },
-        },
+        properties: { "Current Price": { number: price } }
       });
       console.log(`✅ Cập nhật ${ticker} (${symbol}) với giá ${price}`);
     } else {
       console.log(`⚠️ Không cập nhật được giá cho ${ticker} (${symbol})`);
     }
 
-    // ✅ [CẢI TIẾN 2] Thêm độ trễ giữa các request
-    await delay(300); // Chờ 0.3 giây
+    // Thêm độ trễ 500ms để tránh bị rate limit và hoạt động "giống người" hơn
+    await delay(500);
   }
 }
 
-// ✅ [CẢI TIẾN 3] Sử dụng setTimeout đệ quy để chạy ổn định hơn
+/**
+ * Hàm điều khiển vòng lặp, chạy `main` và lên lịch chạy lại.
+ */
 async function run() {
-    try {
-        console.log(`\n🚀 Bắt đầu chu trình cập nhật giá lúc ${new Date().toLocaleTimeString()}`);
-        await main();
-        console.log("✨ Chu trình hoàn tất.");
-    } catch (error) {
-        console.error("❌ Đã xảy ra lỗi nghiêm trọng trong chu trình chính:", error);
-    } finally {
-        const fiveMinutes = 5 * 60 * 1000;
-        console.log(`--- Chờ 5 phút cho lần chạy tiếp theo... ---`);
-        setTimeout(run, fiveMinutes);
-    }
+  try {
+    console.log(`\n🚀 Bắt đầu chu trình cập nhật giá lúc ${new Date().toLocaleString('vi-VN')}`);
+    await main();
+    console.log("✨ Chu trình hoàn tất.");
+  } catch (error) {
+    console.error("❌ Đã xảy ra lỗi nghiêm trọng trong chu trình chính:", error);
+  } finally {
+    const fiveMinutes = 5 * 60 * 1000;
+    console.log(`--- Chờ 5 phút cho lần chạy tiếp theo... ---`);
+    setTimeout(run, fiveMinutes);
+  }
 }
 
 // Bắt đầu chạy ngay lần đầu tiên

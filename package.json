@@ -16,7 +16,7 @@
     "dotenv": "^17.2.1",
     "env": "^0.0.2",
     "fs": "^0.0.1-security",
-    "node-fetch": "^3.3.2",
+    "https-proxy-agent": "^7.0.6",
     "ws": "^8.18.3"
   }
 }
