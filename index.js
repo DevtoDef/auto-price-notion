@@ -55,7 +55,7 @@ async function getPrice(symbol) {
       fetchOptions.agent = agent;
     }
 
-    const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`, fetchOptions);
+    const res = await fetch(`https://api.binance.com/api/v1/ticker/price?symbol=${symbol}`, fetchOptions);
 
     if (!res.ok) {
       const errorBody = await res.text();
