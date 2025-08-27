@@ -112,7 +112,6 @@ async function updatePagePrice(page) {
         page_id: page.id,
         properties: { 
           "Current Price": { number: price },
-          "Last Updated": { date: { start: new Date().toISOString() } }
         }
       });
       console.log(`✅ Cập nhật thành công ${ticker}: $${price.toFixed(6)}`);
