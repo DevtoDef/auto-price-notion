@@ -1,26 +1,70 @@
-name: Update Notion with Binance Price V2
+name: Update Crypto Prices
 
 on:
-  workflow_dispatch:        # cho phép bấm chạy thủ công
+  # Chạy mỗi 5 phút
+  schedule:
+    - cron: '*/5 * * * *'
+  
+  # Cho phép chạy thủ công
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: 'Enable debug mode'
+        required: false
+        default: 'false'
+        type: boolean
+
+# Chỉ cho phép một workflow chạy cùng lúc
+concurrency:
+  group: crypto-price-update
+  cancel-in-progress: false
 
 jobs:
-  update-notion:
+  update-prices:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Timeout sau 10 phút
+    
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 20
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Run script
-        run: node index.js
-        env:
-          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
-          PROXY_URL: ${{ secrets.PROXY_URL }}
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Verify environment
+      run: |
+        echo "Node version: $(node --version)"
+        echo "NPM version: $(npm --version)"
+        echo "Timezone: $(date +%Z)"
+        echo "Current time: $(date)"
+        
+    - name: Update crypto prices
+      env:
+        NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+        NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+        GITHUB_ACTIONS: true
+        NODE_ENV: production
+        TZ: Asia/Ho_Chi_Minh  # Timezone Việt Nam
+      run: |
+        if [ "${{ github.event.inputs.debug }}" = "true" ]; then
+          echo "🐛 Debug mode enabled"
+          DEBUG=* npm start
+        else
+          npm start
+        fi
+        
+    - name: Upload logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: error-logs-${{ github.run_number }}
+        path: |
+          *.log
+          logs/
+        retention-days: 7
