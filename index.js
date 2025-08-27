@@ -14,7 +14,14 @@ const notion = new Client({
 
 async function getPrice(symbol) {
   try {
-    const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
+    const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`, {
+      headers: {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    "Accept": "application/json,text/plain,*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Cache-Control": "no-cache"
+  }
+    });
     if (!res.ok) throw new Error(`Binance API error: ${res.statusText}`);
     const data = await res.json();
     return parseFloat(data.price);
