@@ -39,7 +39,7 @@ async function getPrice(symbol, retries = 3) {
     try {
       console.log(`🔄 Đang lấy giá ${symbol} (lần thử ${attempt}/${retries})`);
       
-      const response = await fetch(`https://api.binance.com/api/v1/ticker/price?symbol=${symbol}`, {
+      const response = await fetch(`https://api.binance.com/api/v2/ticker/price?symbol=${symbol}`, {
         method: 'GET',
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
